@@ -1,0 +1,63 @@
+# Maven
+target/
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+*.iws
+*.ipr
+
+# Build and Runtime
+bin/
+out/
+dist/
+build/
+
+# Test reports and logs
+logs/
+test-results/
+*.log
+
+# Screenshots (but keep directory)
+screenshots/*.png
+screenshots/*.jpg
+!screenshots/.gitkeep
+
+# Playwright
+.wdio/
+browser-data/
+pw-tests/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if using npm)
+node_modules/
+.npm
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+

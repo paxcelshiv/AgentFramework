@@ -1,0 +1,166 @@
+name: Demoblaze Automation Tests
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        description: 'Run the build with tmate debugging enabled'
+        required: false
+        default: false
+
+jobs:
+  test:
+    name: Run Demoblaze Tests
+    runs-on: windows-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: ['11', '17', '21']
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Set up Java
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Install Playwright browsers
+      - name: Install Playwright Browsers
+        run: |
+          mvn exec:java -Dexec.mainClass="com.microsoft.playwright.CLI" -Dexec.args="install" -q
+
+      # Step 4: Build and run tests
+      - name: Build and Run Tests
+        run: |
+          mvn clean test -e
+        continue-on-error: true
+
+      # Step 5: Generate test reports
+      - name: Generate Test Report
+        if: always()
+        run: |
+          if (Test-Path "target/surefire-reports") {
+            Write-Host "Test reports found"
+          } else {
+            Write-Host "No test reports generated"
+          }
+
+      # Step 6: Upload test screenshots
+      - name: Upload Screenshots
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: screenshots-jdk-${{ matrix.java-version }}
+          path: screenshots/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Step 7: Upload test logs
+      - name: Upload Test Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs-jdk-${{ matrix.java-version }}
+          path: logs/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Step 8: Upload test results
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-jdk-${{ matrix.java-version }}
+          path: target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Step 9: Publish test results
+      - name: Publish Test Results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action/windows@v2
+        with:
+          files: target/surefire-reports/*.xml
+          check_name: Test Results - JDK ${{ matrix.java-version }}
+          comment_mode: always
+        continue-on-error: true
+
+      # Step 10: Generate test summary
+      - name: Test Summary
+        if: always()
+        run: |
+          Write-Host "=========================="
+          Write-Host "Test Execution Complete"
+          Write-Host "=========================="
+          if (Test-Path "logs/demoblaze-automation.log") {
+            Write-Host ""
+            Write-Host "Latest log entries:"
+            Get-Content logs/demoblaze-automation.log | Select-Object -Last 20
+          }
+
+      # Step 11: Debug mode (optional)
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ failure() && github.event_name == 'workflow_dispatch' && github.event.inputs.debug_enabled == 'true' }}
+
+  # Job 2: Generate combined report
+  report:
+    name: Generate Test Report
+    runs-on: windows-latest
+    needs: test
+    if: always()
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate Report Summary
+        run: |
+          Write-Host "============================================"
+          Write-Host "Demoblaze Automation Framework - Test Report"
+          Write-Host "============================================"
+          Write-Host "Execution Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+          Write-Host "Branch: ${{ github.ref }}"
+          Write-Host "Commit: ${{ github.sha }}"
+          Write-Host ""
+          Write-Host "Java Versions Tested: 11, 17, 21"
+          Write-Host ""
+          Write-Host "Artifacts Generated:"
+          Write-Host "- Screenshots"
+          Write-Host "- Test Logs"
+          Write-Host "- Test Results (JUnit XML)"
+          Write-Host ""
+          Write-Host "For detailed results, check the workflow artifacts."
+          Write-Host "============================================"
+
+  # Job 3: Notify on failure
+  notify:
+    name: Notify On Failure
+    runs-on: windows-latest
+    needs: test
+    if: failure()
+    
+    steps:
+      - name: Send Notification
+        run: |
+          Write-Host "::warning::Some tests failed. Check the artifacts for details."
+          Write-Host "Failed Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
